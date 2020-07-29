@@ -26,10 +26,13 @@ type Target struct {
 	Version string
 }
 
-func ToTarget(pkg string) Target {
+func ToTarget(pkg string, local bool) Target {
 	db, dep := text.SplitDBFromName(pkg)
 	name, mod, depVersion := splitDep(dep)
 
+	if local {
+		db = "file"
+	}
 	return Target{
 		DB:      db,
 		Name:    name,
@@ -54,6 +57,7 @@ type Pool struct {
 	Targets  []Target
 	Explicit stringset.StringSet
 	Repo     map[string]*alpm.Package
+	Local    map[string]*LocalPkg
 	Aur      map[string]*rpc.Pkg
 	AurCache map[string]*rpc.Pkg
 	Groups   []string
@@ -76,6 +80,7 @@ func makePool(alpmHandle *alpm.Handle) (*Pool, error) {
 		make([]Target, 0),
 		make(stringset.StringSet),
 		make(map[string]*alpm.Package),
+		make(map[string]*LocalPkg),
 		make(map[string]*rpc.Pkg),
 		make(map[string]*rpc.Pkg),
 		make([]string, 0),
@@ -90,7 +95,7 @@ func makePool(alpmHandle *alpm.Handle) (*Pool, error) {
 // Includes db/ prefixes and group installs
 func (dp *Pool) ResolveTargets(pkgs []string, alpmHandle *alpm.Handle,
 	mode settings.TargetMode,
-	ignoreProviders, noConfirm, provides bool, rebuild string, splitN int) error {
+	ignoreProviders, noConfirm, provides bool, rebuild string, splitN int, local bool) error {
 	// RPC requests are slow
 	// Combine as many AUR package requests as possible into a single RPC
 	// call
@@ -99,8 +104,25 @@ func (dp *Pool) ResolveTargets(pkgs []string, alpmHandle *alpm.Handle,
 	pkgs = query.RemoveInvalidTargets(pkgs, mode)
 
 	for _, pkg := range pkgs {
+		if local {
+			localPkg, err := NewLocalPackage(pkg)
+			if err != nil {
+				return err
+			}
+			target := ToTarget(localPkg.Name(), false)
+			if dp.hasPackage(target.DepString()) {
+				continue
+			}
+			dp.Local[pkg] = localPkg
+			dp.Targets = append(dp.Targets, target)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
 		var err error
-		target := ToTarget(pkg)
+		target := ToTarget(pkg, local)
 
 		// skip targets already satisfied
 		// even if the user enters db/pkg and aur/pkg the latter will
@@ -165,7 +187,7 @@ func (dp *Pool) ResolveTargets(pkgs []string, alpmHandle *alpm.Handle,
 		dp.Targets = append(dp.Targets, target)
 	}
 
-	if len(aurTargets) > 0 && (mode == settings.ModeAny || mode == settings.ModeAUR) {
+	if (len(aurTargets) > 0 || len(dp.Local) > 0) && (mode == settings.ModeAny || mode == settings.ModeAUR) {
 		return dp.resolveAURPackages(aurTargets, true, ignoreProviders, noConfirm, provides, rebuild, splitN)
 	}
 
@@ -307,6 +329,7 @@ func (dp *Pool) resolveAURPackages(pkgs stringset.StringSet,
 		}
 		dp.Aur[pkg.Name] = pkg
 
+		// TODO: this isn't happening for local packages
 		for _, deps := range [3][]string{pkg.Depends, pkg.MakeDepends, pkg.CheckDepends} {
 			for _, dep := range deps {
 				newPackages.Set(dep)
@@ -374,14 +397,14 @@ func GetPool(pkgs []string,
 	alpmHandle *alpm.Handle,
 	mode settings.TargetMode,
 	ignoreProviders, noConfirm, provides bool,
-	rebuild string, splitN int) (*Pool, error) {
+	rebuild string, splitN int, local bool) (*Pool, error) {
 	dp, err := makePool(alpmHandle)
 	if err != nil {
 		return nil, err
 	}
 
 	dp.Warnings = warnings
-	err = dp.ResolveTargets(pkgs, alpmHandle, mode, ignoreProviders, noConfirm, provides, rebuild, splitN)
+	err = dp.ResolveTargets(pkgs, alpmHandle, mode, ignoreProviders, noConfirm, provides, rebuild, splitN, local)
 
 	return dp, err
 }
@@ -468,6 +491,16 @@ func (dp *Pool) findSatisfierAurCache(dep string, ignoreProviders, noConfirm, pr
 func (dp *Pool) findSatisfierRepo(dep string) *alpm.Package {
 	for _, pkg := range dp.Repo {
 		if satisfiesRepo(dep, pkg) {
+			return pkg
+		}
+	}
+
+	return nil
+}
+
+func (dp *Pool) findSatisfierLocal(dep string) *LocalPkg {
+	for _, pkg := range dp.Local {
+		if satisfiesAur(dep, pkg) {
 			return pkg
 		}
 	}

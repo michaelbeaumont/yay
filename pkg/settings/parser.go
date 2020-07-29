@@ -419,6 +419,7 @@ func isArg(arg string) bool {
 	case "news":
 	case "gendb":
 	case "currentconfig":
+	case "local":
 	default:
 		return false
 	}

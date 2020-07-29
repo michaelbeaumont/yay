@@ -11,6 +11,7 @@ import (
 
 type Order struct {
 	Aur     []Base
+	Local   []*LocalPkg
 	Repo    []*alpm.Package
 	Runtime stringset.StringSet
 }
@@ -18,6 +19,7 @@ type Order struct {
 func makeOrder() *Order {
 	return &Order{
 		make([]Base, 0),
+		make([]*LocalPkg, 0),
 		make([]*alpm.Package, 0),
 		make(stringset.StringSet),
 	}
@@ -30,6 +32,10 @@ func GetOrder(dp *Pool) *Order {
 		dep := target.DepString()
 		if aurPkg := dp.Aur[dep]; aurPkg != nil && pkgSatisfies(aurPkg.Name, aurPkg.Version, dep) {
 			do.orderPkgAur(RPCPkg{aurPkg}, dp, true)
+		}
+
+		if localPkg := dp.findSatisfierLocal(dep); localPkg != nil {
+			do.orderPkgLocal(localPkg, dp, true)
 		}
 
 		if aurPkg := dp.findSatisfierAur(dep); aurPkg != nil {
@@ -74,6 +80,36 @@ func (do *Order) orderPkgAur(pkg Pkg, dp *Pool, runtime bool) {
 	do.Aur = append(do.Aur, Base{pkg})
 }
 
+func (do *Order) orderPkgLocal(pkg *LocalPkg, dp *Pool, runtime bool) {
+	if runtime {
+		do.Runtime.Set(pkg.Name())
+	}
+	delete(dp.Local, pkg.Name())
+
+	for i, deps := range [3][]string{pkg.Depends(), pkg.MakeDepends(), pkg.CheckDepends()} {
+		for _, dep := range deps {
+			aurPkg := dp.findSatisfierAur(dep)
+			if aurPkg != nil {
+				do.orderPkgAur(aurPkg, dp, runtime && i == 0)
+			}
+
+			repoPkg := dp.findSatisfierRepo(dep)
+			if repoPkg != nil {
+				do.orderPkgRepo(repoPkg, dp, runtime && i == 0)
+			}
+		}
+	}
+
+	for i, base := range do.Local {
+		if base.Pkgbase == pkg.PackageBase() {
+			do.Local[i] = pkg
+			return
+		}
+	}
+
+	do.Local = append(do.Local, pkg)
+}
+
 func (do *Order) orderPkgRepo(pkg *alpm.Package, dp *Pool, runtime bool) {
 	if runtime {
 		do.Runtime.Set(pkg.Name())
@@ -93,12 +129,14 @@ func (do *Order) orderPkgRepo(pkg *alpm.Package, dp *Pool, runtime bool) {
 }
 
 func (do *Order) HasMake() bool {
-	lenAur := 0
+	lenPkgs := 0
 	for _, base := range do.Aur {
-		lenAur += len(base)
+		lenPkgs += len(base)
 	}
+	// TODO use base
+	lenPkgs = lenPkgs + len(do.Local)
 
-	return len(do.Runtime) != lenAur+len(do.Repo)
+	return len(do.Runtime) != lenPkgs+len(do.Repo)
 }
 
 func (do *Order) GetMake() []string {
@@ -111,6 +149,13 @@ func (do *Order) GetMake() []string {
 			}
 		}
 	}
+
+	for _, pkg := range do.Local {
+		if !do.Runtime.Get(pkg.Name()) {
+			makeOnly = append(makeOnly, pkg.Name())
+		}
+	}
+
 
 	for _, pkg := range do.Repo {
 		if !do.Runtime.Get(pkg.Name()) {

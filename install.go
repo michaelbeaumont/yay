@@ -161,7 +161,7 @@ func install(cmdArgs *settings.Arguments, alpmHandle *alpm.Handle, ignoreProvide
 
 	dp, err := dep.GetPool(requestTargets,
 		warnings, alpmHandle, config.Runtime.Mode,
-		ignoreProviders, config.NoConfirm, config.Provides, config.ReBuild, config.RequestSplitN)
+		ignoreProviders, config.NoConfirm, config.Provides, config.ReBuild, config.RequestSplitN, arguments.ExistsArg("local"))
 	if err != nil {
 		return err
 	}
@@ -173,7 +173,7 @@ func install(cmdArgs *settings.Arguments, alpmHandle *alpm.Handle, ignoreProvide
 		}
 	}
 
-	if len(dp.Aur) == 0 {
+	if len(dp.Aur) == 0 && len(dp.Local) == 0 {
 		if !config.CombinedUpgrade {
 			if cmdArgs.ExistsArg("u", "sysupgrade") {
 				fmt.Println(gotext.Get(" there is nothing to do"))
@@ -218,7 +218,7 @@ func install(cmdArgs *settings.Arguments, alpmHandle *alpm.Handle, ignoreProvide
 		arguments.AddTarget(pkg)
 	}
 
-	if len(do.Aur) == 0 && len(arguments.Targets) == 0 && (!cmdArgs.ExistsArg("u", "sysupgrade") || config.Runtime.Mode == settings.ModeAUR) {
+	if len(do.Aur) == 0 && len(do.Local) == 0 && len(arguments.Targets) == 0 && (!cmdArgs.ExistsArg("u", "sysupgrade") || config.Runtime.Mode == settings.ModeAUR) {
 		fmt.Println(gotext.Get(" there is nothing to do"))
 		return nil
 	}
@@ -305,6 +305,9 @@ func install(cmdArgs *settings.Arguments, alpmHandle *alpm.Handle, ignoreProvide
 	}
 
 	srcinfos, err = parseSrcinfoFiles(do.Aur, true)
+	for _, local := range do.Local {
+		srcinfos[local.Pkgbase] = local.Srcinfo
+	}
 	if err != nil {
 		return err
 	}
@@ -414,7 +417,7 @@ func removeMake(do *dep.Order) error {
 }
 
 func inRepos(syncDB alpm.DBList, pkg string) bool {
-	target := dep.ToTarget(pkg)
+	target := dep.ToTarget(pkg, false) // TODO
 
 	if target.DB == "aur" {
 		return false
@@ -971,6 +974,7 @@ func buildInstallPkgbuilds(
 	arguments.DelArg("y", "refresh")
 	arguments.DelArg("u", "sysupgrade")
 	arguments.DelArg("w", "downloadonly")
+	arguments.DelArg("local")
 
 	deps := make([]string, 0)
 	exp := make([]string, 0)
@@ -1018,7 +1022,14 @@ func buildInstallPkgbuilds(
 		return nil
 	}
 
-	for _, base := range do.Aur {
+	var toBuild []dep.Base
+	for _, a := range do.Aur {
+		toBuild = append(toBuild, a)
+	}
+	for _, a := range do.Local {
+		toBuild = append(toBuild, []dep.Pkg{a})
+	}
+	for _, base := range toBuild {
 		pkg := base.Pkgbase()
 		dir := filepath.Join(config.BuildDir, pkg)
 		built := true

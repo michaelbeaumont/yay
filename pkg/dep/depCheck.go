@@ -252,6 +252,21 @@ func (dp *Pool) _checkMissing(dep string, stack []string, missing *missing) {
 		return
 	}
 
+	if localPkg := dp.findSatisfierLocal(dep); localPkg != nil {
+		missing.Good.Set(dep)
+		for _, deps := range [3][]string{localPkg.Depends(), localPkg.MakeDepends(), localPkg.CheckDepends()} {
+			for _, localDep := range deps {
+				if _, err := dp.LocalDB.PkgCache().FindSatisfier(localDep); err == nil {
+					missing.Good.Set(localDep)
+					continue
+				}
+
+				dp._checkMissing(localDep, append(stack, localPkg.Name()), missing)
+			}
+		}
+		return
+	}
+
 	missing.Missing[dep] = [][]string{stack}
 }
 
