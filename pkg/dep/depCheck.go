@@ -19,7 +19,7 @@ func (dp *Pool) checkInnerConflict(name, conflict string, conflicts stringset.Ma
 			continue
 		}
 
-		if satisfiesAur(conflict, pkg) {
+		if satisfiesAur(conflict, RPCPkg{pkg}) {
 			conflicts.Add(name, pkg.Name)
 		}
 	}
@@ -59,7 +59,7 @@ func (dp *Pool) checkReverseConflict(name, conflict string, conflicts stringset.
 			continue
 		}
 
-		if satisfiesAur(conflict, pkg) {
+		if satisfiesAur(conflict, RPCPkg{pkg}) {
 			if name != conflict {
 				name += " (" + conflict + ")"
 			}
@@ -223,22 +223,21 @@ func (dp *Pool) _checkMissing(dep string, stack []string, missing *missing) {
 	aurPkg := dp.findSatisfierAur(dep)
 	if aurPkg != nil {
 		missing.Good.Set(dep)
-		for _, deps := range [3][]string{aurPkg.Depends, aurPkg.MakeDepends, aurPkg.CheckDepends} {
+		for _, deps := range [3][]string{aurPkg.Depends(), aurPkg.MakeDepends(), aurPkg.CheckDepends()} {
 			for _, aurDep := range deps {
 				if _, err := dp.LocalDB.PkgCache().FindSatisfier(aurDep); err == nil {
 					missing.Good.Set(aurDep)
 					continue
 				}
 
-				dp._checkMissing(aurDep, append(stack, aurPkg.Name), missing)
+				dp._checkMissing(aurDep, append(stack, aurPkg.Name()), missing)
 			}
 		}
 
 		return
 	}
 
-	repoPkg := dp.findSatisfierRepo(dep)
-	if repoPkg != nil {
+	if repoPkg := dp.findSatisfierRepo(dep); repoPkg != nil {
 		missing.Good.Set(dep)
 		_ = repoPkg.Depends().ForEach(func(repoDep alpm.Depend) error {
 			if _, err := dp.LocalDB.PkgCache().FindSatisfier(repoDep.String()); err == nil {

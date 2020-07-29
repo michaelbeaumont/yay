@@ -107,12 +107,12 @@ func verSatisfies(ver1, mod, ver2 string) bool {
 	return true
 }
 
-func satisfiesAur(dep string, pkg *rpc.Pkg) bool {
-	if pkgSatisfies(pkg.Name, pkg.Version, dep) {
+func satisfiesAur(dep string, pkg Pkg) bool {
+	if pkgSatisfies(pkg.Name(), pkg.Version(), dep) {
 		return true
 	}
 
-	for _, provide := range pkg.Provides {
+	for _, provide := range pkg.Provides() {
 		if provideSatisfies(provide, dep) {
 			return true
 		}

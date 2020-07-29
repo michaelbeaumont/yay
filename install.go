@@ -573,7 +573,7 @@ func pkgbuildNumberMenu(bases []dep.Base, installed stringset.StringSet) bool {
 
 		anyInstalled := false
 		for _, b := range base {
-			anyInstalled = anyInstalled || installed.Get(b.Name)
+			anyInstalled = anyInstalled || installed.Get(b.Name())
 		}
 
 		if anyInstalled {
@@ -619,7 +619,7 @@ func cleanNumberMenu(bases []dep.Base, installed stringset.StringSet, hasClean b
 			pkg := base.Pkgbase()
 			anyInstalled := false
 			for _, b := range base {
-				anyInstalled = anyInstalled || installed.Get(b.Name)
+				anyInstalled = anyInstalled || installed.Get(b.Name())
 			}
 
 			dir := filepath.Join(config.BuildDir, pkg)
@@ -702,7 +702,7 @@ func editDiffNumberMenu(bases []dep.Base, installed stringset.StringSet, diff bo
 			pkg := base.Pkgbase()
 			anyInstalled := false
 			for _, b := range base {
-				anyInstalled = anyInstalled || installed.Get(b.Name)
+				anyInstalled = anyInstalled || installed.Get(b.Name())
 			}
 
 			if !eIsInclude && eExclude.Get(len(bases)-i) {
@@ -848,7 +848,7 @@ func pkgbuildsToSkip(bases []dep.Base, targets stringset.StringSet) stringset.St
 	for _, base := range bases {
 		isTarget := false
 		for _, pkg := range base {
-			isTarget = isTarget || targets.Get(pkg.Name)
+			isTarget = isTarget || targets.Get(pkg.Name())
 		}
 
 		if (config.ReDownload == "yes" && isTarget) || config.ReDownload == "all" {
@@ -1026,7 +1026,7 @@ func buildInstallPkgbuilds(
 		satisfied := true
 	all:
 		for _, pkg := range base {
-			for _, deps := range [3][]string{pkg.Depends, pkg.MakeDepends, pkg.CheckDepends} {
+			for _, deps := range [3][]string{pkg.Depends(), pkg.MakeDepends(), pkg.CheckDepends()} {
 				for _, dep := range deps {
 					if _, errSatisfier := dp.LocalDB.PkgCache().FindSatisfier(dep); errSatisfier != nil {
 						satisfied = false
@@ -1064,11 +1064,11 @@ func buildInstallPkgbuilds(
 
 		isExplicit := false
 		for _, b := range base {
-			isExplicit = isExplicit || dp.Explicit.Get(b.Name)
+			isExplicit = isExplicit || dp.Explicit.Get(b.Name())
 		}
 		if config.ReBuild == "no" || (config.ReBuild == "yes" && !isExplicit) {
 			for _, split := range base {
-				pkgdest, ok := pkgdests[split.Name]
+				pkgdest, ok := pkgdests[split.Name()]
 				if !ok {
 					return errors.New(gotext.Get("could not find PKGDEST for: %s", split.Name))
 				}
@@ -1086,7 +1086,7 @@ func buildInstallPkgbuilds(
 		if cmdArgs.ExistsArg("needed") {
 			installed := true
 			for _, split := range base {
-				if alpmpkg := dp.LocalDB.Pkg(split.Name); alpmpkg == nil || alpmpkg.Version() != pkgVersion {
+				if alpmpkg := dp.LocalDB.Pkg(split.Name()); alpmpkg == nil || alpmpkg.Version() != pkgVersion {
 					installed = false
 				}
 			}
@@ -1128,7 +1128,7 @@ func buildInstallPkgbuilds(
 			cmdArgs.Options["ask"].Set(fmt.Sprint(uask))
 		} else {
 			for _, split := range base {
-				if _, ok := conflicts[split.Name]; ok {
+				if _, ok := conflicts[split.Name()]; ok {
 					config.NoConfirm = false
 					break
 				}
@@ -1169,11 +1169,11 @@ func buildInstallPkgbuilds(
 		}
 
 		for _, split := range base {
-			if errAdd := doAddTarget(split.Name, false); errAdd != nil {
+			if errAdd := doAddTarget(split.Name(), false); errAdd != nil {
 				return errAdd
 			}
 
-			if errAddDebug := doAddTarget(split.Name+"-debug", true); errAddDebug != nil {
+			if errAddDebug := doAddTarget(split.Name()+"-debug", true); errAddDebug != nil {
 				return errAddDebug
 			}
 		}
@@ -1182,7 +1182,7 @@ func buildInstallPkgbuilds(
 		var wg sync.WaitGroup
 		for _, pkg := range base {
 			wg.Add(1)
-			go updateVCSData(config.Runtime.VCSPath, pkg.Name, srcinfo.Source, &mux, &wg)
+			go updateVCSData(config.Runtime.VCSPath, pkg.Name(), srcinfo.Source, &mux, &wg)
 		}
 
 		wg.Wait()

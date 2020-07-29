@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	alpm "github.com/Jguer/go-alpm"
-	rpc "github.com/mikkeloscar/aur"
 
 	"github.com/Jguer/yay/v10/pkg/stringset"
 	"github.com/Jguer/yay/v10/pkg/text"
@@ -29,18 +28,15 @@ func GetOrder(dp *Pool) *Order {
 
 	for _, target := range dp.Targets {
 		dep := target.DepString()
-		aurPkg := dp.Aur[dep]
-		if aurPkg != nil && pkgSatisfies(aurPkg.Name, aurPkg.Version, dep) {
+		if aurPkg := dp.Aur[dep]; aurPkg != nil && pkgSatisfies(aurPkg.Name, aurPkg.Version, dep) {
+			do.orderPkgAur(RPCPkg{aurPkg}, dp, true)
+		}
+
+		if aurPkg := dp.findSatisfierAur(dep); aurPkg != nil {
 			do.orderPkgAur(aurPkg, dp, true)
 		}
 
-		aurPkg = dp.findSatisfierAur(dep)
-		if aurPkg != nil {
-			do.orderPkgAur(aurPkg, dp, true)
-		}
-
-		repoPkg := dp.findSatisfierRepo(dep)
-		if repoPkg != nil {
+		if repoPkg := dp.findSatisfierRepo(dep); repoPkg != nil {
 			do.orderPkgRepo(repoPkg, dp, true)
 		}
 	}
@@ -48,13 +44,13 @@ func GetOrder(dp *Pool) *Order {
 	return do
 }
 
-func (do *Order) orderPkgAur(pkg *rpc.Pkg, dp *Pool, runtime bool) {
+func (do *Order) orderPkgAur(pkg Pkg, dp *Pool, runtime bool) {
 	if runtime {
-		do.Runtime.Set(pkg.Name)
+		do.Runtime.Set(pkg.Name())
 	}
-	delete(dp.Aur, pkg.Name)
+	delete(dp.Aur, pkg.Name())
 
-	for i, deps := range [3][]string{pkg.Depends, pkg.MakeDepends, pkg.CheckDepends} {
+	for i, deps := range [3][]string{pkg.Depends(), pkg.MakeDepends(), pkg.CheckDepends()} {
 		for _, dep := range deps {
 			aurPkg := dp.findSatisfierAur(dep)
 			if aurPkg != nil {
@@ -69,7 +65,7 @@ func (do *Order) orderPkgAur(pkg *rpc.Pkg, dp *Pool, runtime bool) {
 	}
 
 	for i, base := range do.Aur {
-		if base.Pkgbase() == pkg.PackageBase {
+		if base.Pkgbase() == pkg.PackageBase() {
 			do.Aur[i] = append(base, pkg)
 			return
 		}
@@ -110,8 +106,8 @@ func (do *Order) GetMake() []string {
 
 	for _, base := range do.Aur {
 		for _, pkg := range base {
-			if !do.Runtime.Get(pkg.Name) {
-				makeOnly = append(makeOnly, pkg.Name)
+			if !do.Runtime.Get(pkg.Name()) {
+				makeOnly = append(makeOnly, pkg.Name())
 			}
 		}
 	}
@@ -150,24 +146,24 @@ func (do *Order) Print() {
 
 	for _, base := range do.Aur {
 		pkg := base.Pkgbase()
-		pkgStr := "  " + pkg + "-" + base[0].Version
+		pkgStr := "  " + pkg + "-" + base[0].Version()
 		pkgStrMake := pkgStr
 
 		push := false
 		pushMake := false
 
 		switch {
-		case len(base) > 1, pkg != base[0].Name:
+		case len(base) > 1, pkg != base[0].Name():
 			pkgStr += " ("
 			pkgStrMake += " ("
 
 			for _, split := range base {
-				if do.Runtime.Get(split.Name) {
-					pkgStr += split.Name + " "
+				if do.Runtime.Get(split.Name()) {
+					pkgStr += split.Name() + " "
 					aurLen++
 					push = true
 				} else {
-					pkgStrMake += split.Name + " "
+					pkgStrMake += split.Name() + " "
 					aurMakeLen++
 					pushMake = true
 				}
@@ -175,7 +171,7 @@ func (do *Order) Print() {
 
 			pkgStr = pkgStr[:len(pkgStr)-1] + ")"
 			pkgStrMake = pkgStrMake[:len(pkgStrMake)-1] + ")"
-		case do.Runtime.Get(base[0].Name):
+		case do.Runtime.Get(base[0].Name()):
 			aurLen++
 			push = true
 		default:

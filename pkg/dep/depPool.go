@@ -386,10 +386,10 @@ func GetPool(pkgs []string,
 	return dp, err
 }
 
-func (dp *Pool) findSatisfierAur(dep string) *rpc.Pkg {
+func (dp *Pool) findSatisfierAur(dep string) Pkg {
 	for _, pkg := range dp.Aur {
-		if satisfiesAur(dep, pkg) {
-			return pkg
+		if satisfiesAur(dep, RPCPkg{pkg}) {
+			return RPCPkg{pkg}
 		}
 	}
 
