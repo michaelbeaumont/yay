@@ -10,16 +10,16 @@ import (
 )
 
 type Order struct {
-	Aur     []Base
-	Local   []*LocalPkg
+	Aur     []AURBase
+	Local   []LocalBase
 	Repo    []*alpm.Package
 	Runtime stringset.StringSet
 }
 
 func makeOrder() *Order {
 	return &Order{
-		make([]Base, 0),
-		make([]*LocalPkg, 0),
+		make([]AURBase, 0),
+		make([]LocalBase, 0),
 		make([]*alpm.Package, 0),
 		make(stringset.StringSet),
 	}
@@ -77,7 +77,7 @@ func (do *Order) orderPkgAur(pkg Pkg, dp *Pool, runtime bool) {
 		}
 	}
 
-	do.Aur = append(do.Aur, Base{pkg})
+	do.Aur = append(do.Aur, AURBase{pkg})
 }
 
 func (do *Order) orderPkgLocal(pkg *LocalPkg, dp *Pool, runtime bool) {
@@ -102,12 +102,12 @@ func (do *Order) orderPkgLocal(pkg *LocalPkg, dp *Pool, runtime bool) {
 
 	for i, base := range do.Local {
 		if base.Pkgbase == pkg.PackageBase() {
-			do.Local[i] = pkg
+			do.Local[i] = base
 			return
 		}
 	}
 
-	do.Local = append(do.Local, pkg)
+	do.Local = append(do.Local, pkg.AsBase())
 }
 
 func (do *Order) orderPkgRepo(pkg *alpm.Package, dp *Pool, runtime bool) {
@@ -150,12 +150,13 @@ func (do *Order) GetMake() []string {
 		}
 	}
 
-	for _, pkg := range do.Local {
-		if !do.Runtime.Get(pkg.Name()) {
-			makeOnly = append(makeOnly, pkg.Name())
+	for _, base := range do.Local {
+		for _, pkg := range base.Pkgs() {
+			if !do.Runtime.Get(pkg.Name()) {
+				makeOnly = append(makeOnly, pkg.Name())
+			}
 		}
 	}
-
 
 	for _, pkg := range do.Repo {
 		if !do.Runtime.Get(pkg.Name()) {
@@ -189,20 +190,27 @@ func (do *Order) Print() {
 		}
 	}
 
-	for _, base := range do.Aur {
+	bases := []Base{}
+	for _, p := range do.Aur {
+		bases = append(bases, p)
+	}
+	for _, p := range do.Local {
+		bases = append(bases, p)
+	}
+	for _, base := range bases {
 		pkg := base.Pkgbase()
-		pkgStr := "  " + pkg + "-" + base[0].Version()
+		pkgStr := "  " + pkg + "-" + base.Pkgs()[0].Version()
 		pkgStrMake := pkgStr
 
 		push := false
 		pushMake := false
 
 		switch {
-		case len(base) > 1, pkg != base[0].Name():
+		case len(base.Pkgs()) > 1, pkg != base.Pkgs()[0].Name():
 			pkgStr += " ("
 			pkgStrMake += " ("
 
-			for _, split := range base {
+			for _, split := range base.Pkgs() {
 				if do.Runtime.Get(split.Name()) {
 					pkgStr += split.Name() + " "
 					aurLen++
@@ -216,7 +224,7 @@ func (do *Order) Print() {
 
 			pkgStr = pkgStr[:len(pkgStr)-1] + ")"
 			pkgStrMake = pkgStrMake[:len(pkgStrMake)-1] + ")"
-		case do.Runtime.Get(base[0].Name()):
+		case do.Runtime.Get(base.Pkgs()[0].Name()):
 			aurLen++
 			push = true
 		default:

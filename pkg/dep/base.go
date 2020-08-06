@@ -2,22 +2,54 @@ package dep
 
 import rpc "github.com/mikkeloscar/aur"
 
+type RPCPkg struct {
+	*rpc.Pkg
+}
+
+func (p RPCPkg) Name() string {
+	return p.Pkg.Name
+}
+
+func (p RPCPkg) Version() string {
+	return p.Pkg.Version
+}
+
+func (p RPCPkg) PackageBase() string {
+	return p.Pkg.PackageBase
+}
+
+func (p RPCPkg) Provides() []string {
+	return p.Pkg.Provides
+}
+
+func (p RPCPkg) Depends() []string {
+	return p.Pkg.Depends
+}
+
+func (p RPCPkg) MakeDepends() []string {
+	return p.Pkg.MakeDepends
+}
+
+func (p RPCPkg) CheckDepends() []string {
+	return p.Pkg.CheckDepends
+}
+
 // Base is an AUR base package
-type Base []Pkg
+type AURBase []Pkg
 
 // Pkgbase returns the first base package.
-func (b Base) Pkgbase() string {
+func (b AURBase) Pkgbase() string {
 	return b[0].PackageBase()
 }
 
 // Version returns the first base package version.
-func (b Base) Version() string {
+func (b AURBase) Version() string {
 	return b[0].Version()
 }
 
 // Packages foo and bar from a pkgbase named base would print like so:
 // base (foo bar)
-func (b Base) String() string {
+func (b AURBase) String() string {
 	pkg := b[0]
 	str := pkg.PackageBase()
 	if len(b) > 1 || pkg.PackageBase() != pkg.Name() {
@@ -33,8 +65,12 @@ func (b Base) String() string {
 	return str
 }
 
+func (b AURBase) Pkgs() []Pkg {
+	return b
+}
+
 func GetBases(pkgs []*rpc.Pkg) []Base {
-	basesMap := make(map[string]Base)
+	basesMap := make(map[string]AURBase)
 	for _, pkg := range pkgs {
 		basesMap[pkg.PackageBase] = append(basesMap[pkg.PackageBase], RPCPkg{pkg})
 	}

@@ -105,7 +105,7 @@ func (dp *Pool) ResolveTargets(pkgs []string, alpmHandle *alpm.Handle,
 
 	for _, pkg := range pkgs {
 		if local {
-			localPkg, err := NewLocalPackage(pkg)
+			localPkg, err := NewLocalBase(pkg)
 			if err != nil {
 				return err
 			}
